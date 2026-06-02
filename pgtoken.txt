@@ -1,0 +1,1035 @@
+ 1095  cd tick/
+ 1096  python 02_build_batch_jsonl.py
+ 1097  python 03_submit_batch.py
+ 1098  python 03_submit_batch.py --all
+ 1099  python 04_process_results.py 
+ 1100  python3 -c "
+ 1101  import json
+ 1102  reasons = {}
+ 1103  with open('failed_examples.jsonl') as f:
+ 1104      for line in f:
+ 1105          r = json.loads(line)
+ 1106          reason = r.get('reason', 'unknown')
+ 1107          # get just the prefix before the colon
+ 1108          key = reason.split(':')[0]
+ 1109          reasons[key] = reasons.get(key, 0) + 1
+ 1110  for k,v in sorted(reasons.items(), key=lambda x: -x[1]):
+ 1111      print(f'{v:4d}  {k}')
+ 1112  "
+ 1113  python3 -c "
+ 1114  import json
+ 1115  with open('failed_examples.jsonl') as f:
+ 1116      for i, line in enumerate(f):
+ 1117          r = json.loads(line)
+ 1118          if 'parse_error' in r.get('reason', ''):
+ 1119              raw = r.get('raw', '')
+ 1120              # extract just the content field
+ 1121              try:
+ 1122                  data = json.loads(raw)
+ 1123                  content = data['response']['body']['choices'][0]['message']['content']
+ 1124                  print(f'--- Example {i} ---')
+ 1125                  print(repr(content[:200]))
+ 1126                  print()
+ 1127              except:
+ 1128                  print(f'--- Example {i} raw snippet ---')
+ 1129                  print(raw[:200])
+ 1130                  print()
+ 1131          if i > 5:
+ 1132              break
+ 1133  "
+ 1134  python3 -c "
+ 1135  import json
+ 1136  with open('failed_examples.jsonl') as f:
+ 1137      for i, line in enumerate(f):
+ 1138          r = json.loads(line)
+ 1139          if 'parse_error' in r.get('reason', ''):
+ 1140              raw = r.get('raw', '')
+ 1141              try:
+ 1142                  data = json.loads(raw)
+ 1143                  content = data['response']['body']['choices'][0]['message']['content']
+ 1144                  print(f'--- Example {i} content type: {type(content)} ---')
+ 1145                  print(repr(content))
+ 1146              except Exception as e:
+ 1147                  print(f'--- Example {i} exception: {e} ---')
+ 1148                  print(raw[:500])
+ 1149              print()
+ 1150              if i > 3:
+ 1151                  break
+ 1152  "
+ 1153  python3 -c "
+ 1154  import json
+ 1155  # cross-reference failed custom_ids against the original batch input
+ 1156  failed_ids = set()
+ 1157  with open('failed_examples.jsonl') as f:
+ 1158      for line in f:
+ 1159          r = json.loads(line)
+ 1160          if 'content_filter_null' in r.get('reason', '') or 'parse_error' in r.get('reason', ''):
+ 1161              failed_ids.add(r['custom_id'])
+ 1162  print(f'Failed IDs count: {len(failed_ids)}')
+ 1163  # now find what category those IDs were in the original input
+ 1164  from glob import glob
+ 1165  for chunk_file in sorted(glob('batch_inputs/chunk_0*.jsonl'))[:2]:
+ 1166      with open(chunk_file) as f:
+ 1167          for line in f:
+ 1168              req = json.loads(line)
+ 1169              cid = req['custom_id']
+ 1170              if cid in failed_ids:
+ 1171                  user_msg = req['body']['messages'][1]['content']
+ 1172                  for part in user_msg.split('\n'):
+ 1173                      if 'Category' in part or 'Query' in part:
+ 1174                          print(f'{cid}: {part.strip()}')
+ 1175                          break
+ 1176  " 2>&1 | head -40
+ 1177  python3 -c "
+ 1178  import json
+ 1179  reasons = {}
+ 1180  with open('failed_examples.jsonl') as f:
+ 1181      for line in f:
+ 1182          r = json.loads(line)
+ 1183          reason = r.get('reason', '')
+ 1184          if 'content_filter_null' in reason or 'parse_error' in reason:
+ 1185              try:
+ 1186                  raw = json.loads(r.get('raw', '{}'))
+ 1187                  fr = raw['response']['body']['choices'][0].get('finish_reason', 'unknown')
+ 1188                  reasons[fr] = reasons.get(fr, 0) + 1
+ 1189              except:
+ 1190                  reasons['could_not_parse'] = reasons.get('could_not_parse', 0) + 1
+ 1191  for k,v in reasons.items():
+ 1192      print(f'{v:4d}  finish_reason={k}')
+ 1193  "
+ 1194  python 02_build_batch_jsonl.py
+ 1195  python 03_submit_batch.py --chunk batch_inputs/chunk_01.jsonl
+ 1196  python 04_process_results.py
+ 1197  python3 -c "
+ 1198  import json
+ 1199  reasons = {}
+ 1200  with open('failed_examples.jsonl') as f:
+ 1201      for line in f:
+ 1202          r = json.loads(line)
+ 1203          reason = r.get('reason', 'unknown')
+ 1204          key = reason.split(':')[0]
+ 1205          reasons[key] = reasons.get(key, 0) + 1
+ 1206  for k,v in sorted(reasons.items(), key=lambda x: -x[1]):
+ 1207      print(f'{v:4d}  {k}')
+ 1208  "
+ 1209  python3 -c "
+ 1210  import json
+ 1211  with open('failed_examples.jsonl') as f:
+ 1212      for i, line in enumerate(f):
+ 1213          r = json.loads(line)
+ 1214          reason = r.get('reason', '')
+ 1215          if 'invalid_option_symbol' not in reason:
+ 1216              print(f'reason: {reason}')
+ 1217              print(f'data: {json.dumps(r.get(\"data\", {}), indent=2)[:300]}')
+ 1218              print()
+ 1219          if i > 5:
+ 1220              break
+ 1221  "
+ 1222  python3 -c "
+ 1223  import json
+ 1224  reasons = {}
+ 1225  with open('failed_examples.jsonl') as f:
+ 1226      for line in f:
+ 1227          r = json.loads(line)
+ 1228          if 'parse_error' in r.get('reason', ''):
+ 1229              try:
+ 1230                  raw = json.loads(r.get('raw', '{}'))
+ 1231                  fr = raw['response']['body']['choices'][0].get('finish_reason', 'unknown')
+ 1232                  reasons[fr] = reasons.get(fr, 0) + 1
+ 1233              except:
+ 1234                  reasons['could_not_parse'] = reasons.get('could_not_parse', 0) + 1
+ 1235  for k,v in reasons.items():
+ 1236      print(f'{v:4d}  finish_reason={k}')
+ 1237  "
+ 1238  python3 -c "
+ 1239  import json
+ 1240  with open('batch_inputs/chunk_01.jsonl') as f:
+ 1241      first = json.loads(f.readline())
+ 1242      print('max_completion_tokens:', first['body'].get('max_completion_tokens'))
+ 1243  "
+ 1244  python3 -c "
+ 1245  import json
+ 1246  with open('failed_examples.jsonl') as f:
+ 1247      for i, line in enumerate(f):
+ 1248          r = json.loads(line)
+ 1249          if 'parse_error' in r.get('reason', ''):
+ 1250              try:
+ 1251                  raw = json.loads(r.get('raw', '{}'))
+ 1252                  usage = raw['response']['body'].get('usage', {})
+ 1253                  content = raw['response']['body']['choices'][0]['message']['content']
+ 1254                  print(f\"completion_tokens: {usage.get('completion_tokens')}  reasoning_tokens: {usage.get('completion_tokens_details', {}).get('reasoning_tokens')}  content_len: {len(str(content))}\")
+ 1255              except:
+ 1256                  pass
+ 1257          if i > 5:
+ 1258              break
+ 1259  "
+ 1260  python 02_build_batch_jsonl.py
+ 1261  python3 -c "
+ 1262  import json
+ 1263  with open('batch_inputs/chunk_01.jsonl') as f:
+ 1264      first = json.loads(f.readline())
+ 1265      print('max_completion_tokens:', first['body'].get('max_completion_tokens'))
+ 1266      print('reasoning_effort:', first['body'].get('reasoning_effort'))
+ 1267  "
+ 1268  python 03_submit_batch.py --chunk batch_inputs/chunk_01.jsonl
+ 1269  python 04_process_results.py
+ 1270  grep -n "isinstance(ts, str)" 04_process_results.py
+ 1271  python 04_process_results.py
+ 1272  python 05_to_sharegpt.py 
+ 1273  python 02_build_batch_jsonl.py
+ 1274  python 03_submit_batch.py --chunk batch_inputs/chunk_01.jsonl
+ 1275  # get the batch ID from the jobs log
+ 1276  cat batch_outputs/jobs.jsonl | python3 -c "
+ 1277  import json, sys
+ 1278  for line in sys.stdin:
+ 1279      r = json.loads(line)
+ 1280      print(r['batch_id'], r['chunk'])
+ 1281  "
+ 1282  python 03_submit_batch.py --resume batch_6a0a133c-c9a0-4512-843a-8923a220d63c:batch_inputs/chunk_01.jsonl
+ 1283  python 04_process_results.py 
+ 1284  python 05_to_sharegpt.py 
+ 1285  python 03_submit_batch.py --chunk batch_inputs/chunk_02.jsonl && python 03_submit_batch.py --chunk batch_inputs/chunk_03.jsonl && python 03_submit_batch.py --chunk batch_inputs/chunk_04.jsonl
+ 1286  python 04_process_results.py 
+ 1287  sed -i 's/args = call.get("arguments", {})/args = call.get("arguments", {})\n        if isinstance(args, list):\n            return False, f"call_{i}_arguments_is_list"/' 04_process_results.py
+ 1288  python 04_process_results.py 
+ 1289  python 05_to_sharegpt.py 
+ 1290  # Add the GPG key
+ 1291  curl -fsSL https://pkg.claude-desktop-debian.dev/KEY.gpg | sudo gpg --dearmor -o /usr/share/keyrings/claude-desktop.gpg
+ 1292  # Add the repository
+ 1293  echo "deb [signed-by=/usr/share/keyrings/claude-desktop.gpg arch=amd64,arm64] https://pkg.claude-desktop-debian.dev stable main" | sudo tee /etc/apt/sources.list.d/claude-desktop.list
+ 1294  # Update and install
+ 1295  sudo apt update
+ 1296  sudo apt install claude-desktop
+ 1297  # Download the installer script to wherever you want to run it from
+ 1298  curl -fsSL https://cdn.anythingllm.com/latest/installer.sh -o installer.sh
+ 1299  # Make the script executable
+ 1300  chmod +x installer.sh
+ 1301  # Run the script
+ 1302  ./installer.sh
+ 1303  cd Projects/
+ 1304  ls
+ 1305  mkdir dse
+ 1306  rm -r dse/
+ 1307  mkdir dsa
+ 1308  cd dsa/
+ 1309  code .
+ 1310  ssh ubuntu@strategy-processing
+ 1311  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1312  gpustat
+ 1313  watch
+ 1314  watchwatch -n 1 nvidia-smi
+ 1315  watch -n 1 nvidia-smi
+ 1316  cd Projects/deployedai/tick/
+ 1317  scp tick_v4_train.jsonl tick_v4_val.jsonl ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/ -i ~/.ssh/tick-training_key.pem
+ 1318  scp -i ~/.ssh/tick-training_key.pem     tick_v4_train.jsonl tick_v4_val.jsonl     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/
+ 1319  cd v4/
+ 1320  scp -i ~/.ssh/tick-training_key.pem     tick_v4_train.jsonl tick_v4_val.jsonl     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/
+ 1321  cd
+ 1322  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1323  scp -i ~/.ssh/tick-training_key.pem   ubuntu@135.237.123.220:~/tick-1.5b-v4-epoch1-q4_k_m.gguf   ~/Projects/deployedai/tick/models/
+ 1324  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1325  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1326  scp /home/jaeger/Projects/deployedai/tick/tick_dataset_train.jsonl ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/ -i ~/.ssh/tick-training_key.pem 
+ 1327  scp -i ~/.ssh/tick-training_key.pem     /home/jaeger/Projects/deployedai/tick/tick_dataset_train.jsonl     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/
+ 1328  scp -i ~/.ssh/tick-training_key.pem     /home/jaeger/Projects/deployedai/tick/tick_dataset_val.jsonl     /home/jaeger/Projects/deployedai/tick/06_finetune.py     /home/jaeger/Projects/deployedai/tick/07_evaluate.py     /home/jaeger/Projects/deployedai/tick/08_merge_and_export.py     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/
+ 1329  scp -i ~/.ssh/tick-training_key.pem     /home/jaeger/Projects/deployedai/tick/tick_dataset_train.jsonl     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/
+ 1330  scp -i ~/.ssh/tick-training_key.pem     /home/jaeger/Projects/deployedai/tick/tick_dataset_val.jsonl     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/
+ 1331  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1332  ssh ubuntu@projecth-server
+ 1333  ollama pull qwen2.5:1.5b
+ 1334  sudo apt instlal ollama
+ 1335  sudo apt install ollama
+ 1336  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1337  ssh ubuntu@projecth-server
+ 1338  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1339  scp -i ~/.ssh/tick-training_key.pem     /home/jaeger/Projects/deployedai/tick/tick_dataset_val.jsonl     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/
+ 1340  scp -i ~/.ssh/tick-training_key.pem     /home/jaeger/Projects/deployedai/tick/tick_dataset_train.jsonl     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/
+ 1341  ssh ubuntu@projecth-server
+ 1342  scp -i ~/.ssh/tick-training_key.pem     /home/jaeger/Projects/deployedai/tick/tick_dataset_train.jsonl     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/
+ 1343  scp -i ~/.ssh/tick-training_key.pem     /home/jaeger/Projects/deployedai/tick/tick_dataset_val.jsonl     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/
+ 1344  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1345  ssh ubuntu@projecth-server
+ 1346  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1347  ssh ubuntu@projecth-server
+ 1348  cd Projects/
+ 1349  ls
+ 1350  cd qure
+ 1351  ls
+ 1352  cd qbox/
+ 1353  ls
+ 1354  cd qbox/
+ 1355  ls
+ 1356  cd deployment/\
+ 1357  ls
+ 1358  cd deployment/
+ 1359  ls
+ 1360  cd cxr/
+ 1361  ls
+ 1362  cd
+ 1363  cd Projects/
+ 1364  ls
+ 1365  cd qure
+ 1366  ls
+ 1367  cd clients/
+ 1368  ls
+ 1369  cd lte/
+ 1370  ls
+ 1371  cd ..
+ 1372  ls
+ 1373  cd ..
+ 1374  ls
+ 1375  cd cd
+ 1376  cd
+ 1377  ssh ubuntu@projecth-server
+ 1378  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1379  ssh -N -L 8840:127.0.0.1:8888 ubuntu@projecth-server
+ 1380  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1381  cd Projects/deployedai/tick/
+ 1382  ls
+ 1383  # first copy the merged model from VM
+ 1384  scp -i ~/.ssh/tick-training_key.pem -r   ubuntu@135.237.123.220:~/deployment/tick/tick-1.5b-v4-epoch1-merged   ~/Projects/deployedai/tick/models/
+ 1385  python3 stack.py 
+ 1386  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1387  s
+ 1388  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1389  scp -i ~/.ssh/tick-training_key.pem     bridle_v5_train.jsonl bridle_v5_val.jsonl     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/cd v5
+ 1390  cd v3
+ 1391  cd v5
+ 1392  scp -i ~/.ssh/tick-training_key.pem     bridle_v5_train.jsonl bridle_v5_val.jsonl     ubuntu@135.237.123.220:/home/ubuntu/deployment/tick/
+ 1393  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1394  cat /proc/driver/nvidia/version
+ 1395  sudo apt update
+ 1396  sudo apt install --reinstall   nvidia-driver-535=535.288.01-0ubuntu0.22.04.1   nvidia-dkms-535=535.288.01-0ubuntu0.22.04.1   nvidia-utils-535=535.288.01-0ubuntu0.22.04.1   libnvidia-compute-535=535.288.01-0ubuntu0.22.04.1   libnvidia-gl-535=535.288.01-0ubuntu0.22.04.1   libnvidia-extra-535=535.288.01-0ubuntu0.22.04.1
+ 1397  cd tick/v5/
+ 1398  # on VM
+ 1399  sed -i 's/TRAIN_FILE    = "tick_v4_train.jsonl"/TRAIN_FILE    = "bridle_v5_train.jsonl"/' 06_finetune_v4.py
+ 1400  sed -i 's/VAL_FILE      = "tick_v4_val.jsonl"/VAL_FILE      = "bridle_v5_val.jsonl"/' 06_finetune_v4.py
+ 1401  sed -i 's|OUTPUT_DIR    = "./tick-1.5b-v4"|OUTPUT_DIR    = "./bridle-1.5b-v5"|' 06_finetune_v4.py
+ 1402  sed -i 's/LOG_FILE      = "./training_log_v4.txt"/LOG_FILE      = "./bridle_log_v5.txt"/' 06_finetune_v4.py
+ 1403  # on VM
+ 1404  sed -i 's/TRAIN_FILE    = "tick_v4_train.jsonl"/TRAIN_FILE    = "bridle_v5_train.jsonl"/' 06_finetune_v4.py
+ 1405  sed -i 's/VAL_FILE      = "tick_v4_val.jsonl"/VAL_FILE      = "bridle_v5_val.jsonl"/' 06_finetune_v4.py
+ 1406  sed -i 's|OUTPUT_DIR    = "./tick-1.5b-v4"|OUTPUT_DIR    = "./bridle-1.5b-v5"|' 06_finetune_v4.py
+ 1407  sed -i 's/LOG_FILE      = "./training_log_v4.txt"/LOG_FILE      = "./bridle_log_v5.txt"/' 06_finetune_v4.py
+ 1408  sudo apt install --reinstall   nvidia-driver-535=535.288.01-0ubuntu0.22.04.1   nvidia-dkms-535=535.288.01-0ubuntu0.22.04.1   nvidia-utils-535=535.288.01-0ubuntu0.22.04.1   libnvidia-compute-535=535.288.01-0ubuntu0.22.04.1   libnvidia-gl-535=535.288.01-0ubuntu0.22.04.1   libnvidia-extra-535=535.288.01-0ubuntu0.22.04.1
+ 1409  # apt install linux-headers-$(uname -r)
+ 1410  $ wget https://developer.download.nvidia.com/compute/nvidia-driver/$version/local_installers/nvidia-driver-local-repo-$distro-$version_$arch.deb
+ 1411  wget https://developer.download.nvidia.com/compute/nvidia-driver/$version/local_installers/nvidia-driver-local-repo-$distro-$version_$arch.deb
+ 1412  $ hostnamectl
+ 1413  hostnamectl
+ 1414  cd tick/
+ 1415  conda activate tick
+ 1416  cd ..
+ 1417  python test.py 
+ 1418  cd tick/
+ 1419  wc -l batch_inputs_v2/chunk_*.jsonl
+ 1420  python eval_baseline.py --val tick_dataset_val.jsonl --max 1000
+ 1421  pip install requests
+ 1422  python eval_baseline.py --val tick_dataset_val.jsonl --max 1000
+ 1423  curl -s http://localhost:8080/v1/completions   -H "Content-Type: application/json"   -d '{"model":"local","prompt":"hello","max_tokens":1,"echo":true,"logprobs":1}' | head -c 500
+ 1424  python eval_baseline.py   --model ~/Projects/deployedai/tick/models/qwen2.5-1.5b-instruct-q4_k_m.gguf   --val tick_dataset_val.jsonl   --max 1000
+ 1425  pip install llama-cpp-python
+ 1426  python eval_baseline.py   --model ~/Projects/deployedai/tick/models/qwen2.5-1.5b-instruct-q4_k_m.gguf   --val tick_dataset_val.jsonl   --max 1000
+ 1427  sed -i 's/"avg_loss":   round(avg_loss, 4),/"avg_loss":   float(round(avg_loss, 4)),/' eval_baseline.py
+ 1428  sed -i 's/"perplexity": round(perplexity, 2),/"perplexity": float(round(perplexity, 2)),/' eval_baseline.py
+ 1429  cd v4/
+ 1430  python generate_v4.py 
+ 1431  export AZURE_OPENAI_API_KEY="7G6eue7iW4U9pbDl4r5Z5xlvVBZOIkg2oxXik39hHZSHgh8mD97gJQQJ99CEACfhMk5XJ3w3AAAAACOG2OdX"
+ 1432  python generate_v4.py 
+ 1433  export OPENAI_API_KEY="7G6eue7iW4U9pbDl4r5Z5xlvVBZOIkg2oxXik39hHZSHgh8mD97gJQQJ99CEACfhMk5XJ3w3AAAAACOG2OdX"
+ 1434  python generate_v4.py 
+ 1435  export API_KEY="7G6eue7iW4U9pbDl4r5Z5xlvVBZOIkg2oxXik39hHZSHgh8mD97gJQQJ99CEACfhMk5XJ3w3AAAAACOG2OdX"
+ 1436  python generate_v4.py 
+ 1437  export OPENAI_API_KEY="7G6eue7iW4U9pbDl4r5Z5xlvVBZOIkg2oxXik39hHZSHgh8mD97gJQQJ99CEACfhMk5XJ3w3AAAAACOG2OdX"
+ 1438  python generate_v4.py 
+ 1439  export AZURE_OPENAI_API_KEY="7G6eue7iW4U9pbDl4r5Z5xlvVBZOIkg2oxXik39hHZSHgh8mD97gJQQJ99CEACfhMk5XJ3w3AAAAACOG2OdX"
+ 1440  python generate_v4.py 
+ 1441  AZURE_OPENAI_API_KEY="7G6eue7iW4U9pbDl4r5Z5xlvVBZOIkg2oxXik39hHZSHgh8mD97gJQQJ99CEACfhMk5XJ3w3AAAAACOG2OdX" python generate_v4.py 
+ 1442  python generate_v4.py 
+ 1443  export AZURE_OPENAI_API_KEY = "2sIA8Hyog3gQS4pKz1jnr2WaSvk9GnlzGYDPlwPh1H1Gf4rT6ncUJQQJ99CDACHYHv6XJ3w3AAAAACOGlbSv"
+ 1444  export AZURE_OPENAI_API_KEY="2sIA8Hyog3gQS4pKz1jnr2WaSvk9GnlzGYDPlwPh1H1Gf4rT6ncUJQQJ99CDACHYHv6XJ3w3AAAAACOGlbSv"
+ 1445  python generate_v4.py 
+ 1446  sed -i 's/BASE_PER_COMBO = 10/BASE_PER_COMBO = 100/' prompts_v4.py
+ 1447  python generate_v4.py 
+ 1448  cd ~/Projects/deployedai/tick/llama.cpp
+ 1449  python convert_hf_to_gguf.py   ~/Projects/deployedai/tick/models/tick-1.5b-v4-epoch1-merged   --outtype q4_k_m   --outfile ~/Projects/deployedai/tick/models/tick-1.5b-v4-epoch1-q4_k_m.gguf
+ 1450  ls
+ 1451  cd 
+ 1452  python eval_baseline.py   --model ~/Projects/deployedai/tick/models/qwen2.5-1.5b-instruct-q4_k_m.gguf   --val tick_v4_val.jsonl   --max 1000
+ 1453  python eval_baseline.py   --model ~/Projects/deployedai/tick/models/qwen2.5-1.5b-instruct-q4_k_m.gguf   --val v4/tick_v4_val.jsonl   --max 1000
+ 1454  sed -i 's/n_gpu_layers  = 0/n_gpu_layers  = -1/' eval_baseline.py
+ 1455  sed -i 's/n_ctx         = 4096/n_ctx         = 8192/' eval_baseline.py
+ 1456  python eval_baseline.py   --model ~/Projects/deployedai/tick/models/tick-1.5b-v4-epoch1-q4_k_m.gguf --val v4/tick_v4_val.jsonl   --max 1000
+ 1457  python eval_baseline.py   --model /home/jaeger/Projects/deployedai/tick/models/qwen2.5-1.5b-instruct-q4_k_m.gguf   --val tick_dataset_val.jsonl   --max 1000   --ctx 2048   --batch-size 128   --ubatch-size 128   --gpu-layers -1
+ 1458  python eval_baseline.py   --model /home/jaeger/Projects/deployedai/tick/models/qwen2.5-1.5b-instruct-q4_k_m.gguf   --val tick_dataset_val.jsonl   --max 300   --ctx 1024   --batch-size 64   --ubatch-size 64   --gpu-layers 20
+ 1459  python eval_baseline.py   --model /home/jaeger/Projects/deployedai/tick/models/qwen2.5-1.5b-instruct-q4_k_m.gguf   --val tick_dataset_val.jsonl   --max 1000   --ctx 1024   --batch-size 64   --ubatch-size 64   --gpu-layers 20
+ 1460  python eval_baseline.py   --model /home/jaeger/Projects/deployedai/tick/models/qwen2.5-1.5b-instruct-q4_k_m.gguf   --val tick_dataset_val.jsonl   --max 1000   --ctx 20000   --batch-size 64   --ubatch-size 64   --gpu-layers 20
+ 1461  watch -n 0.5 nvidia-smi
+ 1462  modinfo nvidia | grep version
+ 1463  sudo apt install --reinstall nvidia-driver-535
+ 1464  watch -n 0.5 nvidia-smi
+ 1465  sudo rmmod nvidia
+ 1466  nvidia-smi
+ 1467  cat /proc/driver/nvidia/version
+ 1468  # Source - https://stackoverflow.com/a/57078718
+ 1469  # Posted by HZ-VUW, modified by community. See post 'Timeline' for change history
+ 1470  # Retrieved 2026-05-23, License - CC BY-SA 4.0
+ 1471  sudo apt-get --purge remove "*nvidia*"
+ 1472  nvidia-smi
+ 1473  sudo apt install nvidia-smi
+ 1474  # Source - https://stackoverflow.com/a/57078718
+ 1475  # Posted by HZ-VUW, modified by community. See post 'Timeline' for change history
+ 1476  # Retrieved 2026-05-23, License - CC BY-SA 4.0
+ 1477  sudo /usr/bin/nvidia-uninstall
+ 1478  apt purge nvidia*
+ 1479  apt purge *cuda*
+ 1480  apt list -i |grep nvidia
+ 1481  apt list -i |grep cuda
+ 1482  sudo apt update
+ 1483  sudo apt uppgrade
+ 1484  sudo apt upgrade
+ 1485  ubuntu-drivers devices
+ 1486  sudo apt install nvidia-driver-595-open
+ 1487  sudo apt install nvidia-driver-595-open --fix-broken 
+ 1488  sudo apt install --fix-broken nvidia-driver-595-open  
+ 1489  sudo apt install --fix-broken 
+ 1490  sudo apt install nvidia-driver-595-open
+ 1491  nvidia-smi
+ 1492  sudo reboot
+ 1493  conda create -n dsa python=3.10.18
+ 1494  conda activate dsa
+ 1495  python koko_eating_bananas.py 
+ 1496  pip install google-adk
+ 1497  cd ag
+ 1498  cd agents/
+ 1499  adk create my_agent
+ 1500  pip install google-adk litellm python-dotenv
+ 1501  cd my_agent/
+ 1502  python agent.py 
+ 1503  cd ..
+ 1504  adk run my_agent/
+ 1505  adk run my_agent
+ 1506  adk web --port 8000
+ 1507  adk run my_agent
+ 1508  python test_litellm.py 
+ 1509  adk run my_agent
+ 1510  pip install boto3 botocore
+ 1511  adk web --port 8000
+ 1512  cd tick/
+ 1513  sed -i '/max_seq_length=MAX_SEQ_LEN,/d' 06_finetune.py
+ 1514  sed -i 's/packing=True,/packing=False,/' 06_finetune.py
+ 1515  python3 -c "
+ 1516  import json
+ 1517  examples = []
+ 1518  with open('tick_dataset_train.jsonl') as f:
+ 1519      for i, line in enumerate(f):
+ 1520          if i >= 500: break
+ 1521          ex = json.loads(line)
+ 1522          # get the assistant response
+ 1523          resp = next(t['value'] for t in ex['conversations'] if t['from'] == 'gpt')
+ 1524          examples.append(resp[:80])
+ 1525  # check uniqueness
+ 1526  unique = len(set(examples))
+ 1527  print(f'Unique responses in first 500: {unique}/500')
+ 1528  print()
+ 1529  print('Sample responses:')
+ 1530  for r in examples[:5]:
+ 1531      print(r)
+ 1532  "
+ 1533  python analyzer.py 
+ 1534  conda activate tick
+ 1535  python analyzer.py 
+ 1536  python3 -c "
+ 1537  import json
+ 1538  from collections import Counter
+ 1539  queries = []
+ 1540  with open('tick_dataset_train.jsonl') as f:
+ 1541      for line in f:
+ 1542          ex = json.loads(line)
+ 1543          q = next(t['value'] for t in ex['conversations'] if t['from'] == 'human')
+ 1544          queries.append(q.lower().strip())  # normalize
+ 1545  counts = Counter(queries)
+ 1546  print(f'Case-normalized unique queries: {len(counts):,}')
+ 1547  # also check first 3 words only
+ 1548  first3 = Counter(' '.join(q.split()[:3]) for q in queries)
+ 1549  print(f'Unique by first 3 words: {len(first3):,}')
+ 1550  print()
+ 1551  print('Top 20 first-3-word patterns:')
+ 1552  for pattern, count in first3.most_common(20):
+ 1553      print(f'  [{count:4}x] {pattern}')
+ 1554  "
+ 1555  export AZURE_OPENAI_KEY="2sIA8Hyog3gQS4pKz1jnr2WaSvk9GnlzGYDPlwPh1H1Gf4rT6ncUJQQJ99CDACHYHv6XJ3w3AAAAACOGlbSv"
+ 1556  python 02_generate_queries.py 
+ 1557  python3 -c "
+ 1558  import json
+ 1559  with open('query_gen_batch_output.jsonl') as f:
+ 1560      for i, line in enumerate(f):
+ 1561          result = json.loads(line)
+ 1562          print(f'=== Request {i+1} ===')
+ 1563          print(f'custom_id: {result.get(\"custom_id\")}')
+ 1564          # print full structure keys
+ 1565          print(f'top keys: {list(result.keys())}')
+ 1566          if 'response' in result:
+ 1567              print(f'response keys: {list(result[\"response\"].keys())}')
+ 1568              body = result['response'].get('body', {})
+ 1569              print(f'body keys: {list(body.keys())}')
+ 1570              choices = body.get('choices', [])
+ 1571              if choices:
+ 1572                  msg = choices[0].get('message', {})
+ 1573                  print(f'message keys: {list(msg.keys())}')
+ 1574                  content = msg.get('content', '')
+ 1575                  print(f'content preview: {content[:200]}')
+ 1576          elif 'error' in result:
+ 1577              print(f'ERROR: {result[\"error\"]}')
+ 1578          print()
+ 1579  "
+ 1580  rm query_gen_batch_ids.json query_gen_batch_output.jsonl query_gen_batch_input.jsonl
+ 1581  python 02_generate_queries.py 
+ 1582  python3 -c "
+ 1583  import json, os
+ 1584  output_dir = 'query_gen_outputs'
+ 1585  errors = []
+ 1586  successes = []
+ 1587  for fname in sorted(os.listdir(output_dir)):
+ 1588      if not fname.endswith('.jsonl'):
+ 1589          continue
+ 1590      with open(os.path.join(output_dir, fname)) as f:
+ 1591          for line in f:
+ 1592              result = json.loads(line)
+ 1593              try:
+ 1594                  content = result['response']['body']['choices'][0]['message']['content']
+ 1595                  if content and len(content.strip()) > 5:
+ 1596                      successes.append(content.strip()[:100])
+ 1597                  else:
+ 1598                      errors.append(('empty', content[:50] if content else 'None'))
+ 1599              except Exception as e:
+ 1600                  # check for error field
+ 1601                  err = result.get('error', {})
+ 1602                  errors.append(('exception', str(err)[:100]))
+ 1603  print(f'Successes: {len(successes)}')
+ 1604  print(f'Errors   : {len(errors)}')
+ 1605  print()
+ 1606  print('First 10 successful responses:')
+ 1607  for s in successes[:10]:
+ 1608      print(f'  {s}')
+ 1609  print()
+ 1610  print('Error breakdown (first 15):')
+ 1611  from collections import Counter
+ 1612  err_types = Counter(e[0] for e in errors)
+ 1613  print(f'  {dict(err_types)}')
+ 1614  print()
+ 1615  for kind, msg in errors[:15]:
+ 1616      print(f'  [{kind}] {msg}')
+ 1617  "
+ 1618  python3 -c "
+ 1619  import json, os
+ 1620  output_dir = 'query_gen_outputs'
+ 1621  for fname in sorted(os.listdir(output_dir)):
+ 1622      if not fname.endswith('.jsonl'):
+ 1623          continue
+ 1624      with open(os.path.join(output_dir, fname)) as f:
+ 1625          for i, line in enumerate(f):
+ 1626              result = json.loads(line)
+ 1627              content = result['response']['body']['choices'][0]['message'].get('content')
+ 1628              if content is None:
+ 1629                  # print full message structure
+ 1630                  msg = result['response']['body']['choices'][0]['message']
+ 1631                  print(f'Keys in message: {list(msg.keys())}')
+ 1632                  print(f'Full message: {json.dumps(msg, indent=2)[:500]}')
+ 1633                  break
+ 1634      break
+ 1635  "
+ 1636  python3 -c "
+ 1637  import json, os
+ 1638  from collections import Counter
+ 1639  output_dir = 'query_gen_outputs'
+ 1640  null_by_cat = Counter()
+ 1641  ok_by_cat = Counter()
+ 1642  for fname in sorted(os.listdir(output_dir)):
+ 1643      if not fname.endswith('.jsonl'):
+ 1644          continue
+ 1645      with open(os.path.join(output_dir, fname)) as f:
+ 1646          for line in f:
+ 1647              result = json.loads(line)
+ 1648              custom_id = result.get('custom_id', '')
+ 1649              parts = custom_id.split('_')
+ 1650              category = '_'.join(parts[1:-1])
+ 1651              content = result['response']['body']['choices'][0]['message'].get('content')
+ 1652              if content is None:
+ 1653                  null_by_cat[category] += 1
+ 1654              else:
+ 1655                  ok_by_cat[category] += 1
+ 1656  print('NULL (failed) by category:')
+ 1657  for cat, count in sorted(null_by_cat.items()):
+ 1658      print(f'  {cat:25}: {count:6,}')
+ 1659  print()
+ 1660  print('OK (success) by category:')
+ 1661  for cat, count in sorted(ok_by_cat.items()):
+ 1662      print(f'  {cat:25}: {count:6,}')
+ 1663  "
+ 1664  python3 -c "
+ 1665  import json, os
+ 1666  from collections import Counter
+ 1667  output_dir = 'query_gen_outputs'
+ 1668  finish_reasons = Counter()
+ 1669  null_finish_reasons = Counter()
+ 1670  for fname in sorted(os.listdir(output_dir)):
+ 1671      if not fname.endswith('.jsonl'):
+ 1672          continue
+ 1673      with open(os.path.join(output_dir, fname)) as f:
+ 1674          for line in f:
+ 1675              result = json.loads(line)
+ 1676              content = result['response']['body']['choices'][0]['message'].get('content')
+ 1677              finish_reason = result['response']['body']['choices'][0].get('finish_reason')
+ 1678              finish_reasons[finish_reason] += 1
+ 1679              if content is None:
+ 1680                  null_finish_reasons[finish_reason] += 1
+ 1681  print('All finish_reasons:')
+ 1682  for reason, count in finish_reasons.most_common():
+ 1683      print(f'  {str(reason):20}: {count:6,}')
+ 1684  print()
+ 1685  print('finish_reasons for NULL content only:')
+ 1686  for reason, count in null_finish_reasons.most_common():
+ 1687      print(f'  {str(reason):20}: {count:6,}')
+ 1688  "
+ 1689  pyth 02_generate_queries.py 
+ 1690  python 02_generate_queries.py 
+ 1691  python3 check_diversity.py
+ 1692  python 02_build_batch_jsonl_v2.py
+ 1693  python 03_submit_batch.py --dir batch_inputs_v2 --out batch_outputs_v2
+ 1694  python 03_submit_batch.py
+ 1695  python 03_submit_batch.py --all
+ 1696  sed -i 's/CHUNK_SIZE    = 25_000/CHUNK_SIZE    = 10_000/' 02_build_batch_jsonl_v2.py
+ 1697  python 02_build_batch_jsonl_v2.py
+ 1698  python 03_submit_batch.py --all
+ 1699  python 03_submit_batch.py 
+ 1700  python 04_process_results.py
+ 1701  python3 -c "
+ 1702  import json, os
+ 1703  from glob import glob
+ 1704  files = sorted(glob('batch_outputs/*.jsonl'))  # or batch_outputs_v2
+ 1705  for f in files[:1]:
+ 1706      with open(f) as fp:
+ 1707          for i, line in enumerate(fp):
+ 1708              if i >= 5: break
+ 1709              row = json.loads(line)
+ 1710              print(row.get('custom_id'))
+ 1711  "
+ 1712  python3 -c "
+ 1713  import json
+ 1714  with open('queries_deduped.jsonl') as f:
+ 1715      for i, line in enumerate(f):
+ 1716          if i >= 3: break
+ 1717          rec = json.loads(line)
+ 1718          print(f'index {i} → tick_{i:06d} → {rec[\"query\"][:50]}')
+ 1719  "
+ 1720  python3 -c "
+ 1721  import json, os
+ 1722  from glob import glob
+ 1723  files = sorted(glob('batch_outputs_v2/*_output.jsonl'))
+ 1724  print(f'Found {len(files)} output files')
+ 1725  for f in files[:1]:
+ 1726      with open(f) as fp:
+ 1727          for i, line in enumerate(fp):
+ 1728              if i >= 3: break
+ 1729              row = json.loads(line)
+ 1730              print(row.get('custom_id'))
+ 1731  "
+ 1732  python3 -c "
+ 1733  import json
+ 1734  with open('batch_inputs_v2/chunk_01.jsonl') as f:
+ 1735      row = json.loads(f.readline())
+ 1736      print('custom_id:', row['custom_id'])
+ 1737      print()
+ 1738      for msg in row['body']['messages']:
+ 1739          print(f'[{msg[\"role\"]}]')
+ 1740          print(msg['content'][:300])
+ 1741          print()
+ 1742  "
+ 1743  python3 -c "
+ 1744  import json, glob
+ 1745  files = glob.glob('**/chunk_01_input.jsonl', recursive=True)
+ 1746  print('Found:', files)
+ 1747  if files:
+ 1748      with open(files[0]) as f:
+ 1749          row = json.loads(f.readline())
+ 1750          print('custom_id:', row['custom_id'])
+ 1751          for msg in row['body']['messages']:
+ 1752              print(f'[{msg[\"role\"]}]')
+ 1753              print(msg['content'][:300])
+ 1754              print()
+ 1755  "
+ 1756  python 04_process_results.py
+ 1757  python3 check_diversity.py
+ 1758  python 05_to_sharegpt.py
+ 1759  python inspect_dataset.py 
+ 1760  python 02_generate_queries.py 
+ 1761  python3 -c "
+ 1762  import json, os
+ 1763  from collections import Counter
+ 1764  output_dir = 'query_gen_outputs_v3'
+ 1765  finish_reasons = Counter()
+ 1766  null_finish    = Counter()
+ 1767  for fname in sorted(os.listdir(output_dir)):
+ 1768      if not fname.endswith('.jsonl'):
+ 1769          continue
+ 1770      with open(os.path.join(output_dir, fname)) as f:
+ 1771          for line in f:
+ 1772              result  = json.loads(line)
+ 1773              content = result['response']['body']['choices'][0]['message'].get('content')
+ 1774              reason  = result['response']['body']['choices'][0].get('finish_reason')
+ 1775              finish_reasons[reason] += 1
+ 1776              if content is None:
+ 1777                  null_finish[reason] += 1
+ 1778  print('All finish_reasons:')
+ 1779  for r, c in finish_reasons.most_common():
+ 1780      print(f'  {str(r):20}: {c:6,}')
+ 1781  print()
+ 1782  print('finish_reasons for NULL content:')
+ 1783  for r, c in null_finish.most_common():
+ 1784      print(f'  {str(r):20}: {c:6,}')
+ 1785  "
+ 1786  python 02_generate_queries.py 
+ 1787  python 02_build_batch_jsonl.py   --queries queries_deduped_v3.jsonl   --output-dir batch_inputs_v3
+ 1788  python 03_submit_batch.py   --input-dir batch_inputs_v3   --output-dir batch_outputs_v3
+ 1789  python 03_submit_batch.py   --input-dir batch_inputs_v2   --output-dir batch_outputs_v3
+ 1790  python 02_build_batch_jsonl_v2.py   --queries queries_deduped_v3.jsonl   --output-dir batch_inputs_v3
+ 1791  python 03_submit_batch.py   --input-dir batch_inputs_v3   --output-dir batch_outputs_v3
+ 1792  python 04_process_results.py --output-dir batch_outputs_v3
+ 1793  # check custom_id in output
+ 1794  python3 -c "
+ 1795  import json
+ 1796  with open('batch_outputs_v3/chunk_01_output.jsonl') as f:
+ 1797      row = json.loads(f.readline())
+ 1798      print('output custom_id:', row.get('custom_id'))
+ 1799  "
+ 1800  # check custom_id in input
+ 1801  python3 -c "
+ 1802  import json, glob
+ 1803  files = glob.glob('batch_inputs_v3/*.jsonl')
+ 1804  print('input files:', files[:3])
+ 1805  if files:
+ 1806      with open(sorted(files)[0]) as f:
+ 1807          row = json.loads(f.readline())
+ 1808          print('input custom_id:', row.get('custom_id'))
+ 1809  "
+ 1810  # quick fix — run directly
+ 1811  python3 -c "
+ 1812  import json, os
+ 1813  from glob import glob
+ 1814  # build lookup from ALL input files
+ 1815  lookup = {}
+ 1816  for fpath in sorted(glob('batch_inputs_v3/chunk_*_input.jsonl')):
+ 1817      with open(fpath) as f:
+ 1818          for line in f:
+ 1819              req = json.loads(line)
+ 1820              cid = req.get('custom_id', '')
+ 1821              msgs = req['body']['messages']
+ 1822              query = next(m['content'].strip() for m in msgs if m['role'] == 'user')
+ 1823              lookup[cid] = query
+ 1824  print(f'Lookup built: {len(lookup):,} entries')
+ 1825  print('Sample:', list(lookup.items())[:3])
+ 1826  "
+ 1827  sed -i 's/input_dirs = \["batch_inputs_v2", "batch_inputs"\]/input_dirs = ["batch_inputs_v3", "batch_inputs_v2", "batch_inputs"]/' 04_process_results.py
+ 1828  python 04_process_results.py --output-dir batch_outputs_v3
+ 1829  python 05_to_sharegpt.py
+ 1830  python3 check_diversity.py
+ 1831  cd v4
+ 1832  ls
+ 1833  python judge_dataset.py 
+ 1834  sed -i 's/"max_completion_tokens": 200/"max_completion_tokens": 500/' judge_dataset.py
+ 1835  rm judge_batch_ids.json judge_batch_output.jsonl
+ 1836  python judge_dataset.py 
+ 1837  sed -i 's/"max_completion_tokens": 200/"max_completion_tokens": 2000/' judge_dataset.py
+ 1838  python judge_dataset.py 
+ 1839  rm judge_batch_ids.json judge_batch_output.jsonl
+ 1840  python judge_dataset.py 
+ 1841  python3 -c "
+ 1842  import json
+ 1843  from collections import Counter
+ 1844  reasons = Counter()
+ 1845  with open('judge_batch_output.jsonl') as f:
+ 1846      for line in f:
+ 1847          r = json.loads(line)
+ 1848          content = r['response']['body']['choices'][0]['message'].get('content')
+ 1849          reason  = r['response']['body']['choices'][0].get('finish_reason')
+ 1850          if content is None:
+ 1851              reasons[f'null:{reason}'] += 1
+ 1852          else:
+ 1853              reasons['ok'] += 1
+ 1854  print(dict(reasons.most_common()))
+ 1855  "
+ 1856  sed -i 's/"max_completion_tokens": 200/"max_completion_tokens": 20000/' judge_dataset.py
+ 1857  rm judge_batch_ids.json judge_batch_output.jsonl
+ 1858  python3 -c "
+ 1859  import json
+ 1860  samples = []
+ 1861  with open('judge_batch_output.jsonl') as f:
+ 1862      for line in f:
+ 1863          r = json.loads(line)
+ 1864          content = r['response']['body']['choices'][0]['message'].get('content')
+ 1865          reason  = r['response']['body']['choices'][0].get('finish_reason')
+ 1866          usage   = r['response']['body'].get('usage', {})
+ 1867          if content is None and reason == 'length':
+ 1868              samples.append({
+ 1869                  'completion_tokens': usage.get('completion_tokens'),
+ 1870                  'prompt_tokens': usage.get('prompt_tokens'),
+ 1871                  'total_tokens': usage.get('total_tokens'),
+ 1872              })
+ 1873          if len(samples) >= 5:
+ 1874              break
+ 1875  for s in samples:
+ 1876      print(s)
+ 1877  "
+ 1878  sed -i 's/"max_completion_tokens": 200/"max_completion_tokens": 20000/' judge_dataset.py
+ 1879  python judge_dataset.py 
+ 1880  rm judge_batch_ids.json judge_batch_output.jsonl
+ 1881  python judge_dataset.py 
+ 1882  cd ..
+ 1883  cd v5
+ 1884  python
+ 1885  python generate.py 
+ 1886  atch -n 1 nvidia-smi
+ 1887  watch -n 1 nvidia-smi
+ 1888  htop
+ 1889  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1890  ssh ubuntu@projecth-server
+ 1891  conda activate tick
+ 1892  cd tick/v5
+ 1893  python3 -c "
+ 1894  import json
+ 1895  from collections import Counter
+ 1896  examples = []
+ 1897  with open('bridle_v5_val.jsonl') as f:
+ 1898      for line in f:
+ 1899          examples.append(json.loads(line))
+ 1900  print(f'Total val examples: {len(examples)}')
+ 1901  # check no_tool_needed flag vs calls array
+ 1902  flag_bug   = 0   # calls non-empty but no_tool_needed=true
+ 1903  correct    = 0
+ 1904  no_tool    = 0
+ 1905  parse_err  = 0
+ 1906  bug_samples = []
+ 1907  for ex in examples:
+ 1908      convs = ex['conversations']
+ 1909      resp_turn = next(t for t in convs if t['from'] == 'gpt')
+ 1910      try:
+ 1911          resp  = json.loads(resp_turn['value'])
+ 1912          calls = resp.get('calls', [])
+ 1913          flag  = resp.get('no_tool_needed', False)
+ 1914          if calls and flag == True:
+ 1915              flag_bug += 1
+ 1916              if len(bug_samples) < 5:
+ 1917                  query = next(t['value'] for t in convs if t['from'] == 'human')
+ 1918                  bug_samples.append({'query': query[:80], 'calls': [c.get('tool') for c in calls]})
+ 1919          elif not calls and flag == True:
+ 1920              no_tool += 1
+ 1921          else:
+ 1922              correct += 1
+ 1923      except:
+ 1924          parse_err += 1
+ 1925  print(f'')
+ 1926  print(f'correct (calls + flag consistent) : {correct:,}')
+ 1927  print(f'no_tool_needed=true + no calls    : {no_tool:,}')
+ 1928  print(f'BUG: calls non-empty + flag=true  : {flag_bug:,}  ({flag_bug/len(examples)*100:.1f}%)')
+ 1929  print(f'parse errors                      : {parse_err:,}')
+ 1930  print(f'')
+ 1931  if bug_samples:
+ 1932      print(f'Sample bug examples:')
+ 1933      for s in bug_samples:
+ 1934          print(f'  Q: {s[\"query\"]}')
+ 1935          print(f'  Tools: {s[\"calls\"]}')
+ 1936          print()
+ 1937  "
+ 1938  ls
+ 1939  cd ..
+ 1940  python te
+ 1941  cd ..
+ 1942  python test.py 
+ 1943  cd tick/
+ 1944  conda activate tick
+ 1945  cd token/
+ 1946  python token_check.py 
+ 1947  ssh ubuntu@strategy-processing
+ 1948  ssh ubuntu@projecth-server
+ 1949  ssh ubuntu@strategy-processing
+ 1950  scp ubuntu@strategy-processing:/home/ubuntu/data_stream/questdb_exports/NIFTY_INDEX/* /home/jaeger/Projects/quant/nifty_vix/
+ 1951  scp ubuntu@strategy-processing:/home/ubuntu/data_stream/questdb_exports/VIX_INDEX/* /home/jaeger/Projects/quant/nifty_vix/
+ 1952  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1953  ssh ubuntu@projecth-server
+ 1954  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1955  cd v5
+ 1956  scp -i ~/.ssh/tick-training_key.pem     /home/jaeger/Projects/deployedai/bridle/*     ubuntu@135.237.123.220:/home/ubuntu/deployment/bridle/
+ 1957  ssh ubuntu@projecth-server
+ 1958  scp -i ~/.ssh/tick-training_key.pem     /home/jaeger/Projects/deployedai/bridle/*     ubuntu@135.237.123.220:/home/ubuntu/deployment/bridle/
+ 1959  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1960  ssh ubuntu@projecth-server
+ 1961  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1962  ssh ubuntu@projecth-server
+ 1963  ssh ubuntu@135.237.123.220 -i ~/.ssh/tick-training_key.pem 
+ 1964  ssh ubuntu@strategy-processing
+ 1965  cd
+ 1966  cd Projects/
+ 1967  cd bre
+ 1968  ls
+ 1969  cd BreakingPiracy/
+ 1970  ls
+ 1971  cd deployment/
+ 1972  ls
+ 1973  cat docker-compose.yml 
+ 1974  docker ps
+ 1975  docker inspect local-postgres
+ 1976  cat docker-compose.yml 
+ 1977  sudo systemctl start postgresql
+ 1978  sudo systemctl enable postgresql
+ 1979  sudo vi /etc/postgresql/16/main/postgresql.conf
+ 1980  sudo systemctl disable postgresql
+ 1981  sudo vi /etc/postgresql/16/main/postgresql.conf
+ 1982  sudo systemctl stop postgresql
+ 1983  sudo vi /etc/postgresql/16/main/postgresql.conf
+ 1984  cd /etc/postgresql/
+ 1985  ls
+ 1986  sudo apt install postgresql postgresql-server-dev-16
+ 1987  ls
+ 1988  l
+ 1989  ls
+ 1990  cd 18
+ 1991  ls
+ 1992  cd main/
+ 1993  ls
+ 1994  sudo vi postgresql.conf 
+ 1995  cd
+ 1996  cd Projects/deployedai/
+ 1997  ls
+ 1998  cd pgtoken
+ 1999  sudo systemctl start postgresql
+ 2000  sudo systemctl enable postgresql
+ 2001  psql -p 5434 -U postgres -c "SELECT version();"
+ 2002  sudo vi /etc/postgresql/18/main/postgresql.conf
+ 2003  sudo systemctl restart postgresql
+ 2004  psql -p 5434 -U postgres -c "SELECT version();"
+ 2005  sudo vi /etc/postgresql/18/main/postgresql.conf
+ 2006  sudo systemctl restart postgresql
+ 2007  sudo systemctl enable postgresql
+ 2008  psql -p 5434 -U postgres -c "SELECT version();"
+ 2009  sudo -u postgres psql -p 5434
+ 2010  python3 setup_codebook.py     --csv ./token_frequency_cl100k_base_from_varint.csv     --name cl100k_base     --pgdata /var/lib/postgresql/18/main
+ 2011  sudo mkdir -p /var/lib/postgresql/18/main/pgtoken_codebooks
+ 2012  sudo cp ./token_frequency_cl100k_base_from_varint.csv     /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2013  sudo chown -R postgres:postgres /var/lib/postgresql/18/main/pgtoken_codebooks
+ 2014  sudo ls -la /var/lib/postgresql/18/main/pgtoken_codebooks/
+ 2015  pg_config --version
+ 2016  make
+ 2017  ls /usr/include/postgresql/18/server/postgres.h
+ 2018  sudo apt install postgresql-server-dev-18
+ 2019  ls /usr/include/postgresql/18/server/postgres.h
+ 2020  make
+ 2021  sudo make install
+ 2022  sudo -u postgres psql -p 5434 -c "CREATE EXTENSION pgtoken;"
+ 2023  sudo -u postgres psql -p 5434 -c   "SELECT pgtoken_count(pgtoken_encode(ARRAY[1639,389,257], 'cl100k_base'));"
+ 2024  sudo -u postgres psql -p 5434 -c   "SELECT pgtoken_decode(pgtoken_encode(ARRAY[1639,389,257], 'cl100k_base'), 'cl100k_base');"
+ 2025  sudo tail -50 /var/log/postgresql/postgresql-18-main.log
+ 2026  make
+ 2027  sudo make install
+ 2028  sudo -u postgres psql -p 5434 -c "DROP EXTENSION pgtoken; CREATE EXTENSION pgtoken;"
+ 2029  sudo -u postgres psql -p 5434 -c   "SELECT pgtoken_decode(pgtoken_encode(ARRAY[1639,389,257], 'cl100k_base'), 'cl100k_base');"
+ 2030  make
+ 2031  sudo make install
+ 2032  sudo -u postgres psql -p 5434 -c "DROP EXTENSION pgtoken; CREATE EXTENSION pgtoken;"
+ 2033  sudo -u postgres psql -p 5434 -c   "SELECT pgtoken_decode(pgtoken_encode(ARRAY[1639,389,257], 'cl100k_base'), 'cl100k_base');"
+ 2034  make
+ 2035  sudo make install
+ 2036  sudo -u postgres psql -p 5434 -c "DROP EXTENSION pgtoken; CREATE EXTENSION pgtoken;"
+ 2037  sudo -u postgres psql -p 5434 -c   "SELECT pgtoken_decode(pgtoken_encode(ARRAY[1639,389,257], 'cl100k_base'), 'cl100k_base');"
+ 2038  sudo -u postgres psql -p 5434 -f sql/pgtoken_test.sql 2>&1 | tee test_output.txt
+ 2039  sudo -u postgres psql -p 5434 -f pgtoken_test.sql 2>&1 | tee test_output.txt
+ 2040  cp sql/pgtoken_test.sql /tmp/pgtoken_test.sql
+ 2041  sudo -u postgres psql -p 5434 -f /tmp/pgtoken_test.sql 2>&1 | tee test_output.txt
+ 2042  cp pgtoken_test.sql /tmp/pgtoken_test.sql
+ 2043  sudo -u postgres psql -p 5434 -f /tmp/pgtoken_test.sql 2>&1 | tee test_output.txt
+ 2044  chmod 644 pgtoken_test.sql
+ 2045  sudo -u postgres psql -p 5434 -f sql/pgtoken_test.sql 2>&1 | tee test_output.txt
+ 2046  chmod 644 pgtoken_test.sql
+ 2047  sudo -u postgres psql -p 5434 -f pgtoken_test.sql 2>&1 | tee test_output.txt
+ 2048  sudo -u postgres psql -p 5434 -c   "SELECT pgtoken_decode(pgtoken_encode(ARRAY[0], 'cl100k_base'), 'cl100k_base');"
+ 2049  make
+ 2050  sudo make install
+ 2051  sudo -u postgres psql -p 5434 -c "DROP EXTENSION pgtoken; CREATE EXTENSION pgtoken;"
+ 2052  sudo -u postgres psql -p 5434 -f pgtoken_test.sql 2>&1 | tee test_output.txt
+ 2053  sudo systemctl restart postgresql@18-main
+ 2054  sudo -u postgres psql -p 5434 -c "DROP EXTENSION pgtoken; CREATE EXTENSION pgtoken;"
+ 2055  sudo -u postgres psql -p 5434 -f pgtoken_test.sql 2>&1 | tee test_output.txt
+ 2056  sudo systemctl restart postgresql@18-main
+ 2057  sudo systemctl status postgresql@18-main
+ 2058  sudo ls -la /usr/lib/postgresql/18/lib/pgtoken.so
+ 2059  sudo strings /usr/lib/postgresql/18/lib/pgtoken.so | grep "not in codebook"
+ 2060  grep "^0," /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2061  grep "^4," /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2062  grep "^8," /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2063  sudo grep "^8," /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2064  sudo grep "^4," /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2065  sudo grep "^0," /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2066  head -2 /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2067  sudo head -2 /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2068  make
+ 2069  sudo make install
+ 2070  sudo systemctl restart postgresql@18-main
+ 2071  sudo -u postgres psql -p 5434 -c "DROP EXTENSION pgtoken; CREATE EXTENSION pgtoken;"
+ 2072  sudo -u postgres psql -p 5434 -f pgtoken_test.sql 2>&1 | tee test_output.txt
+ 2073  sudo grep "^[0-9]*,220," /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2074  sudo awk -F',' 'NR>1 {print $2}'   /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv |   sort -n | head -20
+ 2075  sudo awk -F',' 'NR>1 {print $1}'   /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv |   sort -n | uniq -d | head -20
+ 2076  sudo awk -F',' 'NR>1 {print $2}'   /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv |   sort -n | uniq -d | head -20
+ 2077  sudo -u postgres psql -p 5434 -c "
+SELECT pgtoken_decode(
+    pgtoken_encode(ARRAY[220], 'cl100k_base'),
+    'cl100k_base'
+);"
+ 2078  sudo -u postgres psql -p 5434 -c "
+SELECT pgtoken_decode(
+    pgtoken_encode(ARRAY[15], 'cl100k_base'),
+    'cl100k_base'
+);"
+ 2079  sudo python3 -c "
+import csv
+ranks = {}
+collisions = []
+with open('/var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv') as f:
+    reader = csv.reader(f)
+    next(reader)
+    for row in reader:
+        rank, token_id = int(row[0]), int(row[1])
+        if rank in ranks:
+            collisions.append((rank, ranks[rank], token_id))
+        ranks[rank] = token_id
+print(f'Total ranks: {len(ranks)}')
+print(f'Collisions: {len(collisions)}')
+for c in collisions[:20]:
+    print(f'  rank={c[0]}: first={c[1]} overwritten_by={c[2]}')
+"
+ 2080  sudo python3 -c "
+import csv
+with open('/var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv') as f:
+    reader = csv.reader(f)
+    next(reader)
+    for row in reader:
+        rank, token_id = int(row[0]), int(row[1])
+        if token_id == 220:
+            print(f'token 220: rank={rank}, full row={row}')
+        if token_id == 15:
+            print(f'token  15: rank={rank}, full row={row}')
+"
+ 2081  sudo grep ",220," /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2082  python frequency_csv_cleaner.py 
+ 2083  conda activate tick
+ 2084  python frequency_csv_cleaner.py 
+ 2085  sudo python frequency_csv_cleaner.py 
+ 2086  sudo python3 frequency_csv_cleaner.py
+ 2087  sudo cp /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base_clean.csv         /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2088  sudo chown postgres:postgres /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base.csv
+ 2089  sudo -u postgres psql -p 5434 -c "SELECT pgtoken_reload_codebooks();"
+ 2090  sudo -u postgres psql -p 5434 -c   "SELECT pgtoken_decode(pgtoken_encode(ARRAY[220], 'cl100k_base'), 'cl100k_base');"
+ 2091  sudo -u postgres psql -p 5434 -f pgtoken_test.sql 2>&1 | tee test_output.txt
+ 2092  sudo rm /var/lib/postgresql/18/main/pgtoken_codebooks/cl100k_base_clean.csv
+ 2093  sudo -u postgres psql -p 5434 -f pgtoken_test.sql 2>&1 | tee test_output.txt
+ 2094  history > pgtoken.txt

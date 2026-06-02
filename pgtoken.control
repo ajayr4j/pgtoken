@@ -1,0 +1,4 @@
+comment          = 'rank-varint token storage for LLM workloads'
+default_version  = '1.0'
+module_pathname  = '$libdir/pgtoken'
+relocatable      = true

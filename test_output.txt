@@ -1,0 +1,156 @@
+psql:pgtoken_test.sql:4: ERROR:  extension "pgtoken" already exists
+ extname | extversion 
+---------+------------
+ pgtoken | 1.0
+(1 row)
+
+ roundtrip_ok 
+--------------
+ t
+(1 row)
+
+ count_ok 
+----------
+ t
+(1 row)
+
+ empty_ok 
+----------
+ t
+(1 row)
+
+ single_ok 
+-----------
+ t
+(1 row)
+
+ codebook_name 
+---------------
+ cl100k_base
+(1 row)
+
+CREATE TABLE
+INSERT 0 1
+                         content                          | tokens 
+----------------------------------------------------------+--------
+ My name is Ajay and the database is the source of truth. |     13
+(1 row)
+
+ id |                         content                          | tokens 
+----+----------------------------------------------------------+--------
+  1 | My name is Ajay and the database is the source of truth. |     13
+(1 row)
+
+=== pgtoken test suite ===
+--- 1. Basic roundtrip
+ roundtrip_3_tokens 
+--------------------
+ t
+(1 row)
+
+--- 2. Count correctness
+ count_3 
+---------
+ t
+(1 row)
+
+ count_10 
+----------
+ t
+(1 row)
+
+--- 3. Empty array
+ empty_count 
+-------------
+ t
+(1 row)
+
+ empty_roundtrip 
+-----------------
+ t
+(1 row)
+
+--- 4. Single token
+ single_token_0 
+----------------
+ t
+(1 row)
+
+--- 5. Varint boundary coverage
+ boundary_count 
+----------------
+ t
+(1 row)
+
+ boundary_roundtrip 
+--------------------
+ t
+(1 row)
+
+--- 6. Real-length chunk (50 tokens)
+psql:pgtoken_test.sql:141: ERROR:  pgtoken_encode: token_id 13410 is not in codebook "cl100k_base"
+HINT:  Your codebook CSV may be missing this token. Check: SELECT COUNT(*) FROM ... WHERE token_id = 13410
+--- 7. Compression ratio
+ token_count | raw_uint32_bytes | varint_bytes | pct_of_raw | bytes_per_token 
+-------------+------------------+--------------+------------+-----------------
+          10 |               40 |           23 |       57.5 |            2.30
+(1 row)
+
+--- 8. Memory stability (10 sequential calls)
+ i  | ok 
+----+----
+  1 | t
+  2 | t
+  3 | t
+  4 | t
+  5 | t
+  6 | t
+  7 | t
+  8 | t
+  9 | t
+ 10 | t
+(10 rows)
+
+--- 9. Reload codebooks
+psql:pgtoken_test.sql:188: NOTICE:  pgtoken: codebook cache cleared
+ pgtoken_reload_codebooks 
+--------------------------
+ 
+(1 row)
+
+ works_after_reload 
+--------------------
+ t
+(1 row)
+
+--- 10. Table storage and retrieval
+CREATE TABLE
+INSERT 0 3
+ id |                    content                    | tokens 
+----+-----------------------------------------------+--------
+  1 | HDFC Q3 results show 18 percent profit growth |      8
+  2 | RBI policy impact on lending rates            |      6
+  3 | Nifty 50 hits all time high today             |      8
+(3 rows)
+
+ id |                    content                    
+----+-----------------------------------------------
+  1 | HDFC Q3 results show 18 percent profit growth
+  2 | RBI policy impact on lending rates
+  3 | Nifty 50 hits all time high today
+(3 rows)
+
+ id |             recovered_ids             
+----+---------------------------------------
+  1 | {39308,1229,2632,1501,220,972,4,7194}
+  2 | {49738,4947,5536,389,43679,7969}
+  3 | {45,42,19,8,892,21,93,47}
+(3 rows)
+
+--- 11. Codebooks view
+ codebook_name |    filename     
+---------------+-----------------
+ cl100k_base   | cl100k_base.csv
+(1 row)
+
+=== all tests done ===
