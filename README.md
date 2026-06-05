@@ -43,10 +43,10 @@ SELECT pgtoken_decode(token_ids, 'cl100k_base') FROM chunks;
 
 ```bash
 # Ubuntu/Debian
-sudo apt install postgresql-server-dev-16 build-essential
+sudo apt install postgresql-server-dev-18 build-essential
 
 # macOS
-brew install postgresql@16
+brew install postgresql@18
 ```
 
 ### 2. Install codebook CSV
@@ -63,7 +63,7 @@ If auto-detection fails:
 ```bash
 python3 setup_codebook.py \
     --csv token_frequency_cl100k_base_from_varint.csv \
-    --pgdata /var/lib/postgresql/16/main
+    --pgdata /var/lib/postgresql/18/main
 ```
 
 ### 3. Build
