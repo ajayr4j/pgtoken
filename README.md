@@ -159,7 +159,7 @@ rank 0 = most frequent token. This is the output format from pgtoken_py.
 
 Check yours before building:
 ```bash
-head -3 token_frequency_cl100k_base_from_varint.csv
+head -3 data/cl100k_base_codebook.csv
 ```
 
 ---
