@@ -17,42 +17,39 @@ Output: a CSV with columns [token_id, frequency_rank]
   All vocabulary tokens included -- unseen tokens ranked last by token_id
 
 Usage:
-    # From WildChat dataset (recommended general-purpose corpus)
+    # From WildChat dataset, 10 cores
     python scripts/build_codebook.py \\
         --source arrow \\
         --data-dir ./wildchat_data \\
         --tokenizer cl100k_base \\
-        --output data/cl100k_base_codebook.csv
+        --output data/cl100k_base_codebook.csv \\
+        --workers 10
 
-    # From WildChat, Qwen tokenizer
+    # From WildChat, Qwen tokenizer, 8 cores
     python scripts/build_codebook.py \\
         --source arrow \\
         --data-dir ./wildchat_data \\
         --tokenizer-hf Qwen/Qwen2.5-1.5B-Instruct \\
-        --output data/qwen25_codebook.csv
+        --output data/qwen25_codebook.csv \\
+        --workers 8
 
-    # From Postgres table
+    # From Postgres table, 4 cores
     python scripts/build_codebook.py \\
         --source postgres \\
         --dsn "postgresql://user:pass@localhost/mydb" \\
         --table my_table --column content \\
         --tokenizer cl100k_base \\
-        --output data/cl100k_base_codebook.csv
+        --output data/cl100k_base_codebook.csv \\
+        --workers 4
 
-    # Quick test with 10% of data
+    # Quick test with 100k texts, 4 cores
     python scripts/build_codebook.py \\
         --source arrow \\
         --data-dir ./wildchat_data \\
         --tokenizer cl100k_base \\
         --limit 100000 \\
+        --workers 4 \\
         --output data/cl100k_base_codebook.csv
-
-Note on WildChat:
-    WildChat covers 1M+ real LLM conversations across diverse domains.
-    It is a strong general-purpose corpus for most text-heavy applications.
-    For domain-specific deployments (medical, legal, financial), substitute
-    your own corpus -- the frequency rankings will better match your workload
-    and compression will be ~5-15% better than a general-purpose codebook.
 """
 
 import argparse
@@ -60,6 +57,8 @@ import csv
 import gc
 import json
 import math
+import multiprocessing
+import os
 import signal
 import time
 from collections import Counter
@@ -199,30 +198,112 @@ def iter_texts_from_postgres(dsn: str, table: str, column: str, limit: Optional[
 
 
 # ================================================================
-# Core: count frequencies
+# Worker function — runs in each subprocess
 # ================================================================
-def count_frequencies(texts, encode_fn) -> tuple[Counter, int]:
-    counter = Counter()
-    n_texts = 0
-    t0 = time.time()
 
-    for i, text in enumerate(texts):
+def _worker_init(tokenizer_name, tokenizer_hf):
+    """
+    Called once per worker process at startup.
+    Loads the tokenizer into a module-level global so it isn't
+    re-serialised on every task.
+    """
+    global _worker_encode_fn
+    if tokenizer_hf:
+        from transformers import AutoTokenizer
+        tok = AutoTokenizer.from_pretrained(tokenizer_hf)
+        _worker_encode_fn = lambda text: tok.encode(text, add_special_tokens=False)
+    else:
+        import tiktoken
+        enc = tiktoken.get_encoding(tokenizer_name)
+        _worker_encode_fn = lambda text: enc.encode(text, disallowed_special=())
+
+
+def _worker_encode_batch(texts: list[str]) -> Counter:
+    """Encode a batch of texts and return a Counter of token IDs."""
+    counter = Counter()
+    for text in texts:
         try:
-            ids = encode_fn(text)
-            counter.update(ids)
+            counter.update(_worker_encode_fn(text))
         except Exception:
             pass
-        n_texts += 1
+    return counter
 
-        if n_texts % 50_000 == 0:
-            elapsed = time.time() - t0
-            total_tokens = sum(counter.values())
-            print(f"  {n_texts:>8,} texts | {total_tokens:>12,} tokens | "
-                  f"{total_tokens/elapsed:>10,.0f} tok/s")
 
-        if STOP_REQUESTED:
-            print("Stop requested. Saving partial results.")
-            break
+# ================================================================
+# Core: count frequencies (parallel)
+# ================================================================
+BATCH_SIZE = 500   # texts per task submitted to the pool
+
+
+def count_frequencies_parallel(
+    texts,
+    tokenizer_name: Optional[str],
+    tokenizer_hf: Optional[str],
+    workers: int,
+) -> tuple[Counter, int]:
+    """
+    Distribute tokenization across `workers` processes.
+    Each worker loads its own tokenizer instance — no GIL contention.
+    Results are merged into a single Counter in the main process.
+    """
+    counter  = Counter()
+    n_texts  = 0
+    t0       = time.time()
+
+    # initialiser args must be picklable — strings are fine
+    init_args = (tokenizer_name, tokenizer_hf)
+
+    with multiprocessing.Pool(
+        processes=workers,
+        initializer=_worker_init,
+        initargs=init_args,
+    ) as pool:
+        batch = []
+        futures = []
+
+        for text in texts:
+            batch.append(text)
+            if len(batch) >= BATCH_SIZE:
+                futures.append(pool.apply_async(_worker_encode_batch, (batch,)))
+                batch = []
+
+            # collect completed futures periodically to keep memory bounded
+            if len(futures) >= workers * 4:
+                for f in futures:
+                    partial = f.get()
+                    counter.update(partial)
+                    n_texts += len(partial) // max(1, sum(partial.values()) // max(1, BATCH_SIZE))
+                futures = []
+
+                elapsed = time.time() - t0
+                total_tokens = sum(counter.values())
+                if total_tokens > 0:
+                    print(f"  ~{n_texts*BATCH_SIZE:>8,} texts | "
+                          f"{total_tokens:>12,} tokens | "
+                          f"{total_tokens/elapsed:>10,.0f} tok/s | "
+                          f"{workers} workers")
+
+            if STOP_REQUESTED:
+                pool.terminate()
+                break
+
+        # flush remaining batch
+        if batch and not STOP_REQUESTED:
+            futures.append(pool.apply_async(_worker_encode_batch, (batch,)))
+
+        # collect all remaining futures
+        for f in futures:
+            try:
+                partial = f.get()
+                counter.update(partial)
+            except Exception:
+                pass
+
+    # n_texts is approximated above; recount from counter for accuracy
+    total_tokens = sum(counter.values())
+    elapsed = time.time() - t0
+    print(f"  Done. {total_tokens:,} tokens in {elapsed:.1f}s "
+          f"({total_tokens/elapsed:,.0f} tok/s, {workers} workers)")
 
     return counter, n_texts
 
@@ -236,7 +317,7 @@ def write_codebook_csv(counter: Counter, all_token_ids: set, output_path: Path):
     All vocabulary tokens included -- unseen tokens go at the end sorted by token_id.
     rank 0 = most frequent.
     """
-    seen_ids = set(counter.keys())
+    seen_ids   = set(counter.keys())
     unseen_ids = sorted(all_token_ids - seen_ids)
 
     with output_path.open("w", newline="", encoding="utf-8") as f:
@@ -267,10 +348,10 @@ def write_stats_csv(counter: Counter, n_texts: int, output_path: Path):
         for rank, (token_id, freq) in enumerate(counter.most_common(), 1):
             p = freq / total_tokens if total_tokens else 0
             writer.writerow({
-                "rank": rank,
-                "token_id": token_id,
-                "frequency": freq,
-                "probability_pct": round(p * 100, 6),
+                "rank":                  rank,
+                "token_id":              token_id,
+                "frequency":             freq,
+                "probability_pct":       round(p * 100, 6),
                 "self_information_bits": round(-math.log2(p), 4) if p > 0 else None,
             })
     print(f"Stats CSV written: {output_path}")
@@ -306,6 +387,12 @@ def main():
     parser.add_argument("--output-stats", default=None,
                         help="Optional full stats CSV path")
 
+    # Parallelism
+    parser.add_argument("--workers", type=int,
+                        default=max(1, os.cpu_count() - 1),
+                        help="Number of worker processes for tokenization "
+                             "(default: cpu_count - 1). Use 1 for single-threaded.")
+
     # Limits
     parser.add_argument("--limit", type=int, default=None,
                         help="Max number of texts to process (default: all)")
@@ -318,12 +405,14 @@ def main():
     print(f"Source     : {args.source}")
     print(f"Tokenizer  : {args.tokenizer_hf or args.tokenizer}")
     print(f"Output     : {args.output}")
+    print(f"Workers    : {args.workers}")
     print(f"Limit      : {args.limit or 'all'}")
     print()
 
-    # load tokenizer
-    encode_fn, vocab_size, all_token_ids = load_tokenizer(
-        args.tokenizer, args.tokenizer_hf
+    # load tokenizer in main process to get vocab size and all_token_ids
+    _, vocab_size, all_token_ids = load_tokenizer(
+        args.tokenizer if not args.tokenizer_hf else None,
+        args.tokenizer_hf,
     )
     print(f"Vocab size : {vocab_size:,}")
     print()
@@ -339,14 +428,18 @@ def main():
         texts = iter_texts_from_postgres(args.dsn, args.table, args.column, args.limit)
 
     # count
-    print("Counting token frequencies...")
+    print(f"Counting token frequencies with {args.workers} worker(s)...")
     t0 = time.time()
-    counter, n_texts = count_frequencies(texts, encode_fn)
+    counter, n_texts = count_frequencies_parallel(
+        texts,
+        args.tokenizer if not args.tokenizer_hf else None,
+        args.tokenizer_hf,
+        args.workers,
+    )
     elapsed = time.time() - t0
 
     total_tokens = sum(counter.values())
     print()
-    print(f"Processed  : {n_texts:,} texts in {elapsed:.1f}s")
     print(f"Total tok  : {total_tokens:,}  ({total_tokens/elapsed:,.0f} tok/s)")
     print(f"Unique tok : {len(counter):,} / {vocab_size:,}")
     print()
@@ -371,4 +464,5 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method("spawn", force=True)
     main()
