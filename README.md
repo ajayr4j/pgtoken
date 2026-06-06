@@ -17,6 +17,17 @@ pgtoken_reload_codebooks()                          -> void
 
 ---
 
+## Writing
+
+**[pgtoken: storing what you already know](https://ajayr4j.substack.com/p/pgtoken-storing-what-you-already)**
+Technical internals — varint encoding, codebook design, C extension architecture, use cases.
+
+**[How pgtoken recovers GPU time by fixing what runs before it](https://ajayr4j.substack.com/p/how-pgtoken-recovers-gpu-time-by)**
+Benchmark results — 83% tokenizer reduction at concurrency=1, 97.5% at concurrency=100, P99 113ms → 0.62ms.
+
+
+---
+
 ## Quick start
 
 ```sql
