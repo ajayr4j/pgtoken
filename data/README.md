@@ -48,7 +48,7 @@ python scripts/build_codebook.py \
     --output data/qwen25_codebook.csv
 
 # Install to Postgres
-python setup_codebook.py \
+python scripts/setup_codebook.py \
     --csv data/cl100k_base_codebook.csv \
     --name cl100k_base
 ```

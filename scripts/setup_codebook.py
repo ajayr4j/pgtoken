@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-setup_codebook.py
+scripts/setup_codebook.py
 -----------------
 Copies your frequency CSV into $PGDATA/pgtoken_codebooks/
 where the Postgres extension expects it.
 
 Usage:
-    python3 setup_codebook.py \
+    python3 scripts/setup_codebook.py \
         --csv token_frequency_cl100k_base_from_varint.csv \
         --name cl100k_base
 
     # If PGDATA detection fails, pass it explicitly:
-    python3 setup_codebook.py \
+    python3 scripts/setup_codebook.py \
         --csv token_frequency_cl100k_base_from_varint.csv \
         --pgdata /var/lib/postgresql/16/main
 """

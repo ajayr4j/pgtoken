@@ -45,7 +45,7 @@ pgtoken/
 |-- pgtoken--1.0.sql                SQL function definitions
 |-- pgtoken.control                 extension metadata
 |-- Makefile                        build file
-|-- setup_codebook.py               installs codebook CSV to Postgres data dir
+|-- scripts/setup_codebook.py               installs codebook CSV to Postgres data dir
 |
 |-- data/
 |   |-- README.md                   codebook format and generation guide
@@ -78,7 +78,7 @@ brew install postgresql@18
 A pre-built `cl100k_base` codebook is included in `data/`. Install it directly:
 
 ```bash
-python3 setup_codebook.py \
+python3 scripts/setup_codebook.py \
     --csv data/cl100k_base_codebook.csv \
     --name cl100k_base
 ```
@@ -87,7 +87,7 @@ This copies the CSV to `$PGDATA/pgtoken_codebooks/cl100k_base.csv`.
 
 If auto-detection fails:
 ```bash
-python3 setup_codebook.py \
+python3 scripts/setup_codebook.py \
     --csv data/cl100k_base_codebook.csv \
     --pgdata /var/lib/postgresql/18/main
 ```

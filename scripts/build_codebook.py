@@ -460,7 +460,7 @@ def main():
 
     print()
     print("Next step: install codebook to Postgres")
-    print(f"  python setup_codebook.py --csv {args.output} --name {Path(args.output).stem}")
+    print(f"  python scripts/setup_codebook.py --csv {args.output} --name {Path(args.output).stem}")
 
 
 if __name__ == "__main__":
