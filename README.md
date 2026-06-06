@@ -98,7 +98,7 @@ python3 scripts/setup_codebook.py \
 **Building your own codebook (optional):**
 
 The pre-built `cl100k_base` codebook (`data/cl100k_base_codebook.csv`) was generated
-from [WildChat](https://huggingface.co/datasets/allenai/WildChat) — 529K real GPT-3.5
+from [WildChat](https://huggingface.co/datasets/allenai/WildChat) 529K real GPT-3.5
 and GPT-4 conversations across 66 languages.
 
 A larger version, [WildChat-4.8M](https://huggingface.co/datasets/allenai/WildChat-4.8M),
@@ -106,7 +106,7 @@ contains 3.2M conversations (6× larger). We validated the pre-built codebook ag
 a codebook generated from WildChat-4.8M. The result: **90.2% of tokens stayed in the
 same varint byte tier** across both versions. The core frequency distribution is stable.
 The 4.8M codebook showed a slight shift toward code and JSON tokens and away from
-multilingual tokens — making the original WildChat a better default for general-purpose
+multilingual tokens making the original WildChat a better default for general-purpose
 conversational workloads.
 
 Both CSVs are included in `data/` for reference:
@@ -119,7 +119,7 @@ Both CSVs are included in `data/` for reference:
 For domain-specific corpora (medical, legal, financial, code-heavy), build your own:
 
 ```bash
-# Download WildChat-4.8M (~15GB, one-time) — or use your own corpus
+# Download WildChat-4.8M (~15GB, one-time) or use your own corpus
 python3 scripts/download_wildchat.py --dataset allenai/WildChat-4.8M
 
 # Build codebook for tiktoken
