@@ -48,12 +48,15 @@ pgtoken/
 |-- scripts/setup_codebook.py               installs codebook CSV to Postgres data dir
 |
 |-- data/
-|   |-- README.md                   codebook format and generation guide
-|   +-- cl100k_base_codebook.csv    pre-built codebook (WildChat, 100k tokens)
+|   |-- README.md                            codebook format and generation guide
+|   |-- cl100k_base_codebook.csv             pre-built codebook (WildChat 529K, default)
+|   +-- cl100k_base_wildchat4.8M_codebook.csv  codebook built from WildChat-4.8M (3.2M)
 |
 |-- scripts/
 |   |-- download_wildchat.py        downloads WildChat dataset from HuggingFace
-|   +-- build_codebook.py           builds codebook CSV from any corpus
+|   |-- build_codebook.py           builds codebook CSV from any corpus
+|   |-- compare_codebooks.py        compares two codebook versions, studies rank shifts
+|   +-- setup_codebook.py           installs codebook CSV to Postgres data dir
 |
 +-- sql/
     +-- pgtoken_test.sql            test queries
@@ -94,26 +97,52 @@ python3 scripts/setup_codebook.py \
 
 **Building your own codebook (optional):**
 
-The pre-built codebook was generated from WildChat (1M+ real LLM conversations)
-and works well for general-purpose text. For domain-specific corpora, build your own:
+The pre-built `cl100k_base` codebook (`data/cl100k_base_codebook.csv`) was generated
+from [WildChat](https://huggingface.co/datasets/allenai/WildChat) — 529K real GPT-3.5
+and GPT-4 conversations across 66 languages.
+
+A larger version, [WildChat-4.8M](https://huggingface.co/datasets/allenai/WildChat-4.8M),
+contains 3.2M conversations (6× larger). We validated the pre-built codebook against
+a codebook generated from WildChat-4.8M. The result: **90.2% of tokens stayed in the
+same varint byte tier** across both versions. The core frequency distribution is stable.
+The 4.8M codebook showed a slight shift toward code and JSON tokens and away from
+multilingual tokens — making the original WildChat a better default for general-purpose
+conversational workloads.
+
+Both CSVs are included in `data/` for reference:
+
+| File | Source corpus | Tokens |
+|---|---|---|
+| `cl100k_base_codebook.csv` | WildChat (529K conversations) | 98,507 |
+| `cl100k_base_wildchat4.8M_codebook.csv` | WildChat-4.8M (3.2M conversations) | 100,277 |
+
+For domain-specific corpora (medical, legal, financial, code-heavy), build your own:
 
 ```bash
-# Download WildChat dataset (~5GB, one-time)
-python3 scripts/download_wildchat.py
+# Download WildChat-4.8M (~15GB, one-time) — or use your own corpus
+python3 scripts/download_wildchat.py --dataset allenai/WildChat-4.8M
 
 # Build codebook for tiktoken
 python3 scripts/build_codebook.py \
     --source arrow \
-    --data-dir ./wildchat_data \
+    --data-dir data/allenai_WildChat-4.8M \
     --tokenizer cl100k_base \
-    --output data/cl100k_base_codebook.csv
+    --output data/cl100k_base_wildchat4.8M_codebook.csv \
+    --workers 10
+
+# Compare against existing codebook to study distribution shift
+python3 scripts/compare_codebooks.py \
+    --old data/cl100k_base_codebook.csv \
+    --new data/cl100k_base_wildchat4.8M_codebook.csv \
+    --tokenizer cl100k_base
 
 # Build codebook for HuggingFace tokenizers (Qwen, Llama, etc.)
 python3 scripts/build_codebook.py \
     --source arrow \
-    --data-dir ./wildchat_data \
+    --data-dir data/allenai_WildChat-4.8M \
     --tokenizer-hf Qwen/Qwen2.5-1.5B-Instruct \
-    --output data/qwen25_codebook.csv
+    --output data/qwen25_codebook.csv \
+    --workers 10
 ```
 
 See `data/README.md` for full details on codebook generation and when to use a custom corpus.
