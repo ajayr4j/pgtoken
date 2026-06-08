@@ -2,7 +2,6 @@
 
 PostgreSQL extension for rank-varint token storage.
 Store LLM token IDs compactly as bytea. No re-tokenization on read.
-Works alongside pgvector.
 
 ---
 
@@ -204,10 +203,9 @@ head -3 data/cl100k_base_codebook.csv
 
 ---
 
-## Schema pattern with pgvector
+## Schema pattern
 
 ```sql
-CREATE EXTENSION vector;
 CREATE EXTENSION pgtoken;
 
 CREATE TABLE chunks (
@@ -215,11 +213,8 @@ CREATE TABLE chunks (
     document_id uuid NOT NULL,
     content     text NOT NULL,
     token_ids   bytea,
-    embedding   vector(1536),
     chunk_order int NOT NULL
 );
-
-CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops);
 ```
 
 ---
